@@ -2,23 +2,23 @@ import pandas as pd
 import numpy as np 
 import nltk
 nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('wordnet')
 import re
 from nltk.corpus import stopwords 
 from nltk.tokenize import word_tokenize, sent_tokenize 
+from nltk.stem import WordNetLemmatizer
 import math
 
-# headers are: id, title, publication, author, 
-# date, year, month, url, content
-df = pd.read_csv('../data/articles1.csv', sep=',')
+lemmatizer = WordNetLemmatizer()
+stopwords = nltk.corpus.stopwords.words('english')
 
-#print(df.head)
-#print(df['id'].dtypes)
-#print(df.describe())
+# headers are: id, hoursTime, thumbnail, name, mentions,
+# description, category, provider, datePublished, query_use
+df = pd.read_csv('../data/NewsHashed.csv', sep=',')
 
-content1 = df.iloc[1]['content']
-content2 = df.iloc[2]['content']
-
-#print(content1)
+content1 = df.iloc[1]['description']
+content2 = df.iloc[2]['description']
 
 # pre-processing function
 # takes in a string
@@ -36,6 +36,30 @@ def remove_string_special_chars(s):
     stripped = stripped.strip()
 
     return stripped
+
+def pre_process(text):
+    
+    # lowercase
+    text=text.lower()
+    
+    #remove tags
+    text=re.sub("&lt;/?.*?&gt;"," &lt;&gt; ",text)
+    
+    # remove special characters and digits
+    text=re.sub("(\\d|\\W)+"," ",text)
+    
+    return text
+
+def remove_stopwords_lemmatize(documents):
+    docs = []
+    for document in documents:
+        text = remove_string_special_chars(document)
+        nl_text=''
+        for word in word_tokenize(text):
+            if word not in stopwords:
+                nl_text += (lemmatizer.lemmatize(word)) + ' '
+            docs.append(nl_text)
+    return docs
 
 # function for splitting text into sentences and considering
 # each sentence as a document, calculates the total word count
@@ -119,6 +143,7 @@ def computeTFIDF(TF_scores, IDF_scores):
         TFIDF_scores.append(temp)
     return TFIDF_scores
 
+'''
 text_sents = sent_tokenize(content1)
 text_sents_clean = [remove_string_special_chars(s) for s in text_sents]
 doc_info = get_doc(text_sents_clean)
@@ -126,13 +151,7 @@ freqDict_list = create_freq_dict(text_sents_clean)
 TF_scores = computeTF(doc_info, freqDict_list)
 IDF_scores = computeIDF(doc_info, freqDict_list)
 TFIDF_scores = computeTFIDF(TF_scores, IDF_scores)
-
-#print(doc_info, '\n')
-#print(freqDict_list)
-#print(TF_scores, '\n', IDF_scores)
-#print(TFIDF_scores)
-
-#print(df.shape[0])
+'''
 
 ############################################################
 # https://medium.com/deep-math-machine-learning-ai/chapter-9-1-nlp-word-vectors-d51bff9628c1
@@ -140,25 +159,92 @@ TFIDF_scores = computeTFIDF(TF_scores, IDF_scores)
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 docs = []
+doc_names = []
 for i in range(1, 10):#df.shape[0]):
-    text_sents = sent_tokenize(df.iloc[i]['content'])
+    text_sents = sent_tokenize(df.iloc[i]['description'])
+    doc_name = "Article " + str(i)
+    doc_names.append(doc_name)
     text_sents_clean = [remove_string_special_chars(s) for s in text_sents]
     text_sents_clean = ' '.join(word for word in text_sents_clean)
     docs.append(text_sents_clean)
+
+docs = remove_stopwords_lemmatize(docs)
 
 vectorizer1 = TfidfVectorizer(sublinear_tf=True, max_df=1.0)
 bow1 = vectorizer1.fit_transform(docs)
 
 feature_names = vectorizer1.get_feature_names()
 corpus_index = [n for n in docs]
+# print(corpus_index)
 
 df2 = pd.DataFrame(bow1.todense(), index=corpus_index, columns=feature_names)
+#print(df2.head())
+#print(df2.shape)
 
+#######################################################################
+# http://kavita-ganesan.com/extracting-keywords-from-text-tfidf/#.XGn8fYWIZCY
+#######################################################################
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+
+def sort_coo(coo_matrix):
+    tuples = zip(coo_matrix.col, coo_matrix.data)
+    return sorted(tuples, key=lambda x:(x[1], x[0]), reverse=True)
+
+def extract_topn_from_vector(feature_names, sorted_items, topn=10):
+    sorted_items = sorted_items[:topn]
+    score_vals = []
+    feature_vals = []
+
+    for idx, score in sorted_items:
+        score_vals.append(round(score, 3))
+        feature_vals.append(feature_names[idx])
+
+    results = {}
+    for idx in range(len(feature_vals)):
+        results[feature_vals[idx]] = score_vals[idx]
+
+    return results
+
+df_idf = pd.read_csv('../data/NewsHashed.csv',sep=',')
+#print("Schema:\n\n", df_idf.dtypes)
+#print("Number of questions, columns=", df_idf.shape)
+
+
+df_idf['text'] = df_idf['name'] + df_idf['description']
+df_idf['text'] = df_idf['text'].apply(lambda x:pre_process(x))
+
+#print(df_idf['text'][2])
+
+docs = df_idf['text'].tolist()
+cv = CountVectorizer(max_df=0.85,stop_words=stopwords)
+word_count_vector = cv.fit_transform(docs)
+#print(list(cv.vocabulary_.keys())[:10])
+
+tfidf_transformer = TfidfTransformer(smooth_idf=True,use_idf=True)
+tfidf_transformer.fit(word_count_vector)
+
+feature_names = cv.get_feature_names()
+doc = docs[3]
+tf_idf_vector = tfidf_transformer.transform(cv.transform([doc]))
+sorted_items = sort_coo(tf_idf_vector.tocoo())
+keywords = extract_topn_from_vector(feature_names,sorted_items,10)
+
+print("\n======Doc======")
+print(doc)
+print("\n====Keywords====")
+for k in keywords:
+    print(k, keywords[k])
+
+
+
+
+'''
 ############################################################
 # https://medium.com/deep-math-machine-learning-ai/chapter-9-2-nlp-code-for-word2vec-neural-network-tensorflow-544db99f5334
 ############################################################
 
-sentences = df.iloc[1:11]['content'].tolist()
+sentences = df.iloc[1:11]['description'].tolist()
 normalized_sentences=[]
 for sentence in sentences:
     text_sents = sent_tokenize(sentence)
@@ -260,3 +346,4 @@ if trained_embeddings.shape[1] == 2:
             textcoords='offset points', ha='right', va='bottom')
     plt.savefig("word2vec.png")
     plt.show()
+'''
