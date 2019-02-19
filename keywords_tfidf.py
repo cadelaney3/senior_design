@@ -83,6 +83,8 @@ print("\n====Keywords====")
 for k in doc3_keywords:
     print(k, doc3_keywords[k])
 '''
+df_idf['keywords'] = np.empty((len(df_idf), 0)).tolist()
+print(df_idf.iloc[3]['keywords'])
 
 keyword_dict = {}
 for i in range(len(docs)):
@@ -90,7 +92,14 @@ for i in range(len(docs)):
     sorted_items = sort_coo(tf_idf_vector.tocoo())
     kws = extract_topn_from_vector(feature_names,sorted_items,10)
     keyword_dict[i] = kws
+    kw_list = []
+    for k in kws:
+        kw_list.append(k)
+    df_idf.at[i, 'keywords'] = kw_list
 
+print(df_idf.iloc[3]['keywords'])
+
+'''
 related_to_doc = []
 for i in range(len(keyword_dict)):
     is_related = False
@@ -102,6 +111,7 @@ for i in range(len(keyword_dict)):
 
 for related in related_to_doc:
     print(related, '\n')
+'''
 
 
 
