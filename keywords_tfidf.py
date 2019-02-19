@@ -74,10 +74,34 @@ feature_names = cv.get_feature_names()
 doc = docs[3]
 tf_idf_vector = tfidf_transformer.transform(cv.transform([doc]))
 sorted_items = sort_coo(tf_idf_vector.tocoo())
-keywords = extract_topn_from_vector(feature_names,sorted_items,10)
+doc3_keywords = extract_topn_from_vector(feature_names,sorted_items,10)
 
+'''
 print("\n======Doc======")
 print(doc)
 print("\n====Keywords====")
-for k in keywords:
-    print(k, keywords[k])
+for k in doc3_keywords:
+    print(k, doc3_keywords[k])
+'''
+
+keyword_dict = {}
+for i in range(len(docs)):
+    tf_idf_vector = tfidf_transformer.transform(cv.transform([docs[i]]))
+    sorted_items = sort_coo(tf_idf_vector.tocoo())
+    kws = extract_topn_from_vector(feature_names,sorted_items,10)
+    keyword_dict[i] = kws
+
+related_to_doc = []
+for i in range(len(keyword_dict)):
+    is_related = False
+    for k in keyword_dict[i]:
+        if k in doc3_keywords:
+            is_related = True
+    if is_related == True:
+        related_to_doc.append(df_idf.iloc[i]['name'])
+
+for related in related_to_doc:
+    print(related, '\n')
+
+
+
